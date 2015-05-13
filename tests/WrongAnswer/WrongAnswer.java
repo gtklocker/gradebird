@@ -5,16 +5,9 @@ public class WrongAnswer {
     Scanner in = new Scanner(System.in);
 
     if (in.hasNextInt()) {
-      int num = in.nextInt();
-      if (num == 1) {
-        System.out.println("hi world");
+      if (in.nextInt() == 1) {
+        System.out.println("Corect");
       }
-      else {
-        System.out.println("goodbye world");
-      }
-    }
-    else {
-      System.out.println("hello world");
     }
   }
 }
