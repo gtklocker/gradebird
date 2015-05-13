@@ -1,0 +1,87 @@
+#!/bin/bash
+
+TIMEOUT=0.1
+
+function log {
+  status=$1
+  message=$2
+  color='\x1B'
+  end='\x1B[0m'
+
+  if [[ "$status" == "success" ]]; then
+    color="$color[1;32m"
+  elif [[ "$status" == "fail" ]]; then
+    color="$color[1;31m"
+  elif [[ "$status" == "processing" ]]; then
+    color="$color[1;36m"
+  else
+    color="$color[0m"
+  fi
+  echo -e "$color:: $message$end"
+}
+
+filepath=$1
+filename=`printf $filepath|awk -F '/' '{ print $NF }'`
+relpath=`printf $filepath|awk -F '/' '{ $NF="" }1'|tr ' ' '/'|sed 's/\/$//'`
+relpath=${relpath:-.}
+
+classname=`printf $filename|cut -d '.' -f 1`
+log "processing" "Compiling file $filepath, with class $classname."
+
+javac $filepath
+if [[ $? -ne 0 ]]; then
+  log "fail" "Compilation failed."
+  log "fail" "Grading failed."
+  exit 1
+fi
+
+log "success" "Compilation succeded."
+
+testcases_regex=`printf $filename|sed 's/.java$/.\\\d.in/'`
+failures=0
+for input_file in `find $relpath -maxdepth 1|grep $testcases_regex`; do
+  index=`printf $input_file|rev|cut -d '.' -f 2`
+  output_file=`printf $input_file|sed 's/.in$/.out/'`
+  real_output_file="$relpath/$classname.$index.real.out"
+
+  log "processing" "Grading testcase $index."
+  java -cp $relpath $classname < $input_file > $real_output_file &
+  java_pid=$!
+  sleep $TIMEOUT
+
+  if [[ `ps $java_pid|grep $java_pid|wc -l|tr -d ' '` == "1" ]]; then
+    log "fail" "Time limit exceeded (TLE) on testcase $index."
+    disown $java_pid
+    kill -9 $java_pid &> /dev/null
+
+    ((++failures))
+    continue
+  fi
+
+  wait $java_pid
+  if [[ $? -ne 0 ]]; then
+    log "fail" "Execution failed on testcase $index."
+
+    ((++failures))
+    continue
+  fi
+
+  diff --strip-trailing-cr $real_output_file $output_file > /dev/null
+  if [[ $? -ne 0 ]]; then
+    log "fail" "Wrong Answer (WA) on testcase $index."
+
+    ((++failures))
+    continue
+  fi
+  log "success" "Correct output on testcase $index!"
+done
+
+rm $relpath/$classname.*.real.out
+
+if [[ $failures -eq 0 ]]; then
+  log "success" "PASSED"
+  exit 0
+else
+  log "fail" "FAILED"
+  exit 1
+fi
